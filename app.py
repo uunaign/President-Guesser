@@ -1,7 +1,6 @@
 import pandas as pd
 import gradio as gr
 
-# --- CONFIGURACIÓN DE DATOS ---
 df = pd.read_csv('presidentes.csv')
 
 preguntas_dict = {
@@ -46,69 +45,72 @@ def calcular_mejor_pregunta(df_actual, lista_preguntas_hechas):
     return mejor_columna
 
 def jugar(respuesta, historial_df, preguntas_hechas, columna_actual):
-    # Convertir el historial de nuevo a DataFrame
     posibles = pd.DataFrame(historial_df)
     
-    # Si hay una pregunta activa, filtrar según la respuesta del usuario
     if columna_actual:
         valor_buscado = 1 if respuesta == "Sí" else 0
         posibles = posibles[posibles[columna_actual] == valor_buscado]
         preguntas_hechas.append(columna_actual)
 
-    # Comprobar estado del juego
     if len(posibles) == 1:
         nombre = posibles.iloc[0]['nombre']
-        return f"¡LO TENGO! Estás pensando en: {nombre}", [], [], None, gr.update(visible=False), gr.update(visible=True)
+        return f"## ¡LO TENGO!\n### Estás pensando en: **{nombre}**", [], [], None, gr.update(visible=False), gr.update(visible=True)
     
     if len(posibles) == 0:
-        return "Vaya, me he quedado sin ideas. ¿Seguro que respondiste correctamente?", [], [], None, gr.update(visible=False), gr.update(visible=True)
+        return "## Vaya, me he quedado sin ideas...\n¿Seguro que respondiste correctamente?", [], [], None, gr.update(visible=False), gr.update(visible=True)
 
-    # Buscar la siguiente pregunta
     siguiente_columna = calcular_mejor_pregunta(posibles, preguntas_hechas)
     
     if not siguiente_columna:
         nombres = ", ".join(posibles['nombre'].tolist())
-        return f"No puedo decidirme, podría ser: {nombres}", [], [], None, gr.update(visible=False), gr.update(visible=True)
+        return f"## No puedo decidirme...\nPodría ser: {nombres}", [], [], None, gr.update(visible=False), gr.update(visible=True)
 
-    texto_pregunta = preguntas_dict[siguiente_columna]
+    texto_pregunta = f"### {preguntas_dict[siguiente_columna]}"
     
-    # Devolver estado actualizado a los componentes invisibles de Gradio
     return texto_pregunta, posibles.to_dict(), preguntas_hechas, siguiente_columna, gr.update(visible=True), gr.update(visible=False)
 
 def reiniciar():
     return jugar(None, df.to_dict(), [], None)
 
-# --- INTERFAZ GRADIO ---
 
-with gr.Blocks() as demo:
+custom_css = """
+#pregunta-container { 
+    min-height: 100px; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    text-align: center;
+    padding: 10px;
+}
+.gradio-container button {
+    min-height: 60px !important;
+}
+"""
+
+with gr.Blocks(css=custom_css) as demo:
     gr.Markdown("# 🏛️ Adivinador de Presidentes")
-    gr.Markdown("Piensa en un presidente y yo intentaré adivinarlo.")
     
-    # Variables de estado (invisibles para el usuario)
     estado_df = gr.State(df.to_dict())
     estado_preguntas = gr.State([])
     columna_actual = gr.State(None)
     
-    # Interfaz visual
-    pregunta_txt = gr.Textbox(label="Mi pregunta:", interactive=False)
+    with gr.Column(elem_id="pregunta-container"):
+        pregunta_display = gr.Markdown("Cargando pregunta...")
     
     with gr.Row() as fila_botones:
         btn_si = gr.Button("Sí", variant="primary")
         btn_no = gr.Button("No", variant="stop")
     
-    resultado_final = gr.Markdown("")
     btn_reintentar = gr.Button("Jugar de nuevo", visible=False)
 
-    # Eventos
     btn_si.click(jugar, [gr.State("Sí"), estado_df, estado_preguntas, columna_actual], 
-                 [pregunta_txt, estado_df, estado_preguntas, columna_actual, fila_botones, btn_reintentar])
+                 [pregunta_display, estado_df, estado_preguntas, columna_actual, fila_botones, btn_reintentar])
     
     btn_no.click(jugar, [gr.State("No"), estado_df, estado_preguntas, columna_actual], 
-                 [pregunta_txt, estado_df, estado_preguntas, columna_actual, fila_botones, btn_reintentar])
+                 [pregunta_display, estado_df, estado_preguntas, columna_actual, fila_botones, btn_reintentar])
     
-    btn_reintentar.click(reiniciar, None, [pregunta_txt, estado_df, estado_preguntas, columna_actual, fila_botones, btn_reintentar])
+    btn_reintentar.click(reiniciar, None, [pregunta_display, estado_df, estado_preguntas, columna_actual, fila_botones, btn_reintentar])
 
-    # Cargar primera pregunta al iniciar
-    demo.load(reiniciar, None, [pregunta_txt, estado_df, estado_preguntas, columna_actual, fila_botones, btn_reintentar])
+    demo.load(reiniciar, None, [pregunta_display, estado_df, estado_preguntas, columna_actual, fila_botones, btn_reintentar])
 
 demo.launch()
